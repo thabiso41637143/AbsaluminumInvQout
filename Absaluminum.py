@@ -85,11 +85,14 @@ def capture_items():
                                , (item_descr, item_unit_price, item_qty, item_total_price,))
             abs_db.commit()
     abs_cursor.execute("select * from materials")
-    df = pd.DataFrame(abs_cursor.fetchall(), columns=["Item Number", "Description", "Unit price", "Quantity", "Total amount"])
-    df["Total amount"] = df["Total amount"].apply(lambda x: f"R {x:.2f}")
-    df["Unit price"] = df["Unit price"].apply(lambda x: f"R {x:.2f}")
-    st.write("**List of items**")
-    st.table(df)
+    table_data = abs_cursor.fetchall()
+    
+    if len(table_data):
+        df = pd.DataFrame(table_data, columns=["Item Number", "Description", "Unit price", "Quantity", "Total amount"])
+        df["Total amount"] = df["Total amount"].apply(lambda x: f"R {x:.2f}")
+        df["Unit price"] = df["Unit price"].apply(lambda x: f"R {x:.2f}")
+        st.write("**List of items**")
+        st.table(df)
     abs_cursor.execute("SELECT COALESCE(SUM(total_amount), 0.00) AS total_value FROM materials")
     sub_total = abs_cursor.fetchall()[0][0]
 
