@@ -7,10 +7,10 @@ from datetime import datetime, timedelta
 
 def cust_details():
     st.write("**Customer Details**")
-    inv_to = st.text_input("Invoiced To")
-    email = st.text_input("Client Email")
-    contact = st.text_input("Contact Numbers")
-    address = st.text_area("Client Adress")
+    inv_to = st.text_input("Invoiced To", key="Invto")
+    email = st.text_input("Client Email", key="email")
+    contact = st.text_input("Contact Numbers", key="contnumb")
+    address = st.text_area("Client Address", key="adr")
 
     return [inv_to, email, contact, address]
 
@@ -18,12 +18,12 @@ def inv_details(cust_type = ""):
     cust_type = ["Other", "ALW Properties", "Houghton"]
     st.write("**Invoice Details**")
     #Still under construction
-    cust_selection = st.selectbox("Select Customer", cust_type,index=None, placeholder="Select customer")
+    cust_selection = st.selectbox("Select Customer", cust_type,index=None, placeholder="Select customer", key="custtype")
 
-    inv_no = st.text_input("Inv Number",disabled=True)
-    inv_date = st.date_input("Inv Date", datetime.today(), format="DD-MM-YYYY")
+    inv_no = st.text_input("Inv Number",disabled=True, key="Invnumb")
+    inv_date = st.date_input("Inv Date", datetime.today(), format="DD-MM-YYYY", key="date")
     future_date  = inv_date + timedelta(days=30)
-    in_due_date = st.date_input("Inv Due Date", format="DD-MM-YYYY", value=future_date)
+    in_due_date = st.date_input("Inv Due Date", format="DD-MM-YYYY", value=future_date, key="duedate")
 
     return [inv_no, inv_date.strftime("%d %b %Y"), in_due_date.strftime("%d %b %Y")]
 
@@ -41,35 +41,54 @@ def additional_totals(subtot):
 
     st.write("**ADDITIONAL TOTALS**")
 
-    discount = st.checkbox("Add Discount", value=False)
+    discount = st.checkbox("Add Discount", value=False, key="add_disc")
     if discount:
         discount_input = st.number_input("**Discount**",format="%0.2f", min_value=discount_input, max_value=float(subtot), key="discount_input")
 
-    inst_cost = st.checkbox("Add Installation Cost", value=True)
+    inst_cost = st.checkbox("Add Installation Cost", value=True, key="add_inst")
     if inst_cost:
         inst_cost_input = st.number_input("**Installation Cost**",format="%0.2f", min_value=inst_cost_input, value=float(subtot * 0.1), key="inst_cost_input")
     
-    tax = st.checkbox("Add Tax Rate", value=False)
+    tax = st.checkbox("Add Tax Rate", value=False, key="add_tax")
     if tax:
         tax_input = st.number_input("**Tax Rate**",format="%0.2f", min_value=tax_input, disabled=True, value=float(((subtot + inst_cost_input) - discount_input) * TAX_RATE), key="tax_input")
     
-    deposite = st.checkbox("Add Deposit", value=True)
+    deposite = st.checkbox("Add Deposit", value=True, key="add_dep")
     if deposite:
         total_am = float(subtot + inst_cost_input + tax_input)
         deposite_input = st.number_input("**Deposit**",format="%0.2f", min_value=deposite_input,max_value=total_am, value=(total_am * DEPOSITE_RATE), key="dep_input")
     
     return [tax_input, discount_input, deposite_input, inst_cost_input]
 
+def add_items(item_descr, item_unit_price, item_qty, item_total_price):
+
+    if item_descr == None or item_descr.strip(" ") == "" or not item_unit_price > 0:
+        st.warning("Please fill the Description of the Item.")
+    else:
+        abs_cursor.execute("""Insert into materials(description, unit_price, qty, total_amount) values(?,?,?,?)"""
+                            , (item_descr, item_unit_price, item_qty, item_total_price,))
+        st.session_state["current_status"] = "Reset"
+        abs_db.commit()
+
 def capture_items():
     st.write("**MATERIALS**")
-    item_descr = st.text_area("Descriptions")
+    if st.session_state.get("current_status", "") == "Reset":
+        descr, unit_price, qty_value = None, 0.00, 1
+        st.session_state["current_status"] = ""
+    else:
+        descr, unit_price, qty_value = st.session_state.get("descr", None), st.session_state.get("unit_price", 0.00), st.session_state.get("qty", 1)
+        
+    item_descr = st.text_area("Descriptions", key="descr", value=descr)
+
     up, qty, tp = st.columns(3)
 
     with up:
-        item_unit_price = st.number_input("Unit Price",format="%0.2f", min_value=0.00,value=0.00)
+        abs_db.commit()
+        item_unit_price = st.number_input("Unit Price",format="%0.2f", min_value=0.00,value=float(unit_price), key="unit_price")
 
     with qty:
-        item_qty = st.number_input("Quantity", min_value=1)
+        abs_db.commit()
+        item_qty = st.number_input("Quantity", min_value=1, key="qty", value=int(qty_value))
 
     if item_unit_price > 0 or item_qty > 1:
         st.session_state.total_price = item_qty * item_unit_price
@@ -78,15 +97,10 @@ def capture_items():
         item_total_price = st.number_input("Total Price", format="%0.2f", key="total_price", disabled=True)
 
     if st.button("**Add Item**"):
-        if item_descr == None or item_descr.strip(" ") == "" or not item_unit_price > 0:
-            st.warning("Please fill the Description of the Item.")
-        else:
-            abs_cursor.execute("""Insert into materials(description, unit_price, qty, total_amount) values(?,?,?,?)"""
-                               , (item_descr, item_unit_price, item_qty, item_total_price,))
-            abs_db.commit()
+        add_items(item_descr, item_unit_price, item_qty, item_total_price)
+
     abs_cursor.execute("select * from materials")
     table_data = abs_cursor.fetchall()
-    
     if len(table_data):
         df = pd.DataFrame(table_data, columns=["Item Number", "Description", "Unit price", "Quantity", "Total amount"])
         df["Total amount"] = df["Total amount"].apply(lambda x: f"R {x:.2f}")
@@ -97,19 +111,13 @@ def capture_items():
     sub_total = abs_cursor.fetchall()[0][0]
 
     left, right = st.columns(2, border=True)
-
     with left:
         add_totals = additional_totals(subtot=sub_total)
 
     with right:
         tot = totals(subtot=sub_total, add_totals=add_totals)
 
-    
-
-def gen_qoutation():
-    st.write("**Generate new qoutation**")
-    
-
+def gen_qout_inv(gen_message=""):
     left, right = st.columns(2, border=True)
     with left:
         customer = cust_details()
@@ -120,19 +128,27 @@ def gen_qoutation():
     mat = st.columns(1, border=True)
     with mat[0]:
         capture_items()
-
     
+    if st.session_state.get("current_status", "") == "Reset":
+        st.rerun()
     
-    if st.button("Generate Qoutation"):
+    if st.button(gen_message):
         abs_cursor.execute("DELETE FROM materials")
         abs_db.commit()
         abs_cursor.execute("select * from materials")
         st.write(abs_cursor.fetchall())
         abs_db.close()
         st.rerun()
+
+    st.write(st.session_state)
+
+def gen_qoutation():
+    st.title("Generate new qoutation".upper())
+    gen_qout_inv(gen_message="**Generate Qoutation**")
     
 def gen_invoice():
-    st.write("Generate new invoice")
+    st.title("Generate new invoice".upper())
+    gen_qout_inv(gen_message="**Generate Invoice**")
 
 def edit_qoutation():
     st.write("Edit qoutaion")
@@ -143,19 +159,26 @@ def edit_invoice():
 
 abs_db = sqlite3.connect("AbsDatabase.db")
 abs_cursor = abs_db.cursor()
-tables = """
+
+tables = ["""
 CREATE TABLE IF NOT EXISTS materials (
-    item_id INT AUTO_INCREMENT PRIMARY KEY,
+    item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoiceNumber VARCHAR(255),
     description VARCHAR(255),
     unit_price DECIMAL(10, 2),
     qty INT,
     total_amount DECIMAL(12, 2)
-);
+)
 """
-abs_cursor.execute(tables)
+]
+for query in tables:
+    abs_cursor.execute(query)
+abs_db.commit()
+
 TAX_RATE = 0.15
 DEPOSITE_RATE = 0.7
-st.title("ABSALUMINUM LTD (PTY) COMPANY")
+
+st.image("Images/Heading_Letter_head.png")
 
 qoutation = st.radio("Select an option below",["Qoutation", "Invoice", "Edit Qoutation", "Edit Invoice"])
 
