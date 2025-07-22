@@ -47,26 +47,41 @@ def additional_totals(subtot):
 
     inst_cost = st.checkbox("Add Installation Cost", value=True, key="add_inst")
     if inst_cost:
-        inst_cost_input = st.number_input("**Installation Cost**",format="%0.2f", min_value=inst_cost_input, value=float(subtot * 0.1), key="inst_cost_input")
+        inst_cost_input = st.number_input("**Installation Cost**",format="%0.2f", min_value=inst_cost_input, value=float((st.session_state.get("sub_tot", 0.0) - st.session_state.get("discount_input", 0.0)) * 0.1), key="inst_cost_input")
     
-    tax = st.checkbox("Add Tax Rate", value=False, key="add_tax")
+    tax = st.checkbox("Add Tax Rate", value=False, key="add_tax", disabled=True)
     if tax:
-        tax_input = st.number_input("**Tax Rate**",format="%0.2f", min_value=tax_input, disabled=True, value=float(((subtot + inst_cost_input) - discount_input) * TAX_RATE), key="tax_input")
+        tax_input = st.number_input("**Tax Rate**",format="%0.2f", min_value=tax_input, disabled=True, value=float(((st.session_state.get("sub_tot", 0.0) + inst_cost_input) - st.session_state.get("discount_input", 0.0)) * TAX_RATE), key="tax_input")
     
     deposite = st.checkbox("Add Deposit", value=True, key="add_dep")
     if deposite:
-        total_am = float(subtot + inst_cost_input + tax_input)
+        total_am = float(st.session_state.get("tot_bal", 0.0) + st.session_state.get("inst_cost_input", 0.0) + st.session_state.get("tax_input", 0.0))#
         deposite_input = st.number_input("**Deposit**",format="%0.2f", min_value=deposite_input,max_value=total_am, value=(total_am * DEPOSITE_RATE), key="dep_input")
     
     return [tax_input, discount_input, deposite_input, inst_cost_input]
 
+def add_items_validator(item_descr, item_unit_price):
+    valid = []
+    if item_descr == None or item_descr.strip(" ") == "":
+        valid.append(f"Please add the description of the item first on the **Descriptions** section.")
+
+    if not item_unit_price > 0:
+        valid.append(f"Please set the price of the product on **Unit Price** section")
+
+    if st.session_state.get("custtype", None) == None:
+        valid.append(f"Please make sure that you **select customer** first")
+    
+    if len(valid) > 0:
+        validate_dilog(valid)
+    return valid
+
+
 def add_items(item_descr, item_unit_price, item_qty, item_total_price):
 
-    if item_descr == None or item_descr.strip(" ") == "" or not item_unit_price > 0:
-        st.warning("Please fill the Description of the Item.")
-    else:
-        abs_cursor.execute("""Insert into materials(description, unit_price, qty, total_amount) values(?,?,?,?)"""
-                            , (item_descr, item_unit_price, item_qty, item_total_price,))
+    add_valid = add_items_validator(item_descr, item_unit_price)
+    if len(add_valid) == 0:
+        abs_cursor.execute("""Insert into materials(invoiceNumber, description, unit_price, qty, total_amount) values(?,?,?,?,?)"""
+                            , (st.session_state.get("Invnumb", '0'),item_descr, item_unit_price, item_qty, item_total_price,))
         st.session_state["current_status"] = "Reset"
         abs_db.commit()
 
@@ -102,7 +117,7 @@ def capture_items():
     abs_cursor.execute("select * from materials")
     table_data = abs_cursor.fetchall()
     if len(table_data):
-        df = pd.DataFrame(table_data, columns=["Item Number", "Description", "Unit price", "Quantity", "Total amount"])
+        df = pd.DataFrame(table_data, columns=["Item Number", "invoice Number", "Description", "Unit price", "Quantity", "Total amount"])
         df["Total amount"] = df["Total amount"].apply(lambda x: f"R {x:.2f}")
         df["Unit price"] = df["Unit price"].apply(lambda x: f"R {x:.2f}")
         st.write("**List of items**")
@@ -133,14 +148,57 @@ def gen_qout_inv(gen_message=""):
         st.rerun()
     
     if st.button(gen_message):
-        abs_cursor.execute("DELETE FROM materials")
-        abs_db.commit()
         abs_cursor.execute("select * from materials")
-        st.write(abs_cursor.fetchall())
+        finalise_inv_qout(abs_cursor.fetchall())
         abs_db.close()
+        # st.rerun()
+
+@st.dialog("Invoice To")
+def validate_dilog(message):
+    for m in message:
+        st.write(m)
+
+    if st.button("OKAY"):
         st.rerun()
 
-    st.write(st.session_state)
+def warning_validator():
+    warnings = []
+
+    if st.session_state.get("email", "").strip(" ") == "":
+        warnings.append(f"Email not filled!")
+
+    if st.session_state.get("contnumb", "").strip(" ") == "":
+        warnings.append(f"You didn't capture the client contact numbers!")
+
+    if st.session_state.get("adr", "").strip(" ") == "":
+        warnings.append(f"Client address was not added!")
+    
+    for w in warnings:
+        st.warning(w)
+
+def finalise_inv_qout(mat_data):
+    input_validator = []
+
+    if not len(mat_data) > 0:
+        input_validator.append(f"Please Please add 1 product first")
+
+    if st.session_state.get("Invto", "").strip(" ") == "":
+        input_validator.append(f"Please Fill in the **Invoice to**")
+    
+    if st.session_state.get("custtype", None) == None:
+        input_validator.append(f"Please make sure that you **select customer**")
+    
+    if len(input_validator) > 0:
+        st.write(input_validator)
+        validate_dilog(input_validator)
+    else:
+        warning_validator()
+        st.write(mat_data)
+        abs_cursor.execute("DELETE FROM materials")
+        abs_db.commit()
+    
+    
+
 
 def gen_qoutation():
     st.title("Generate new qoutation".upper())
@@ -150,12 +208,6 @@ def gen_invoice():
     st.title("Generate new invoice".upper())
     gen_qout_inv(gen_message="**Generate Invoice**")
 
-def edit_qoutation():
-    st.write("Edit qoutaion")
-
-
-def edit_invoice():
-    st.write("Edit invoice")
 
 abs_db = sqlite3.connect("AbsDatabase.db")
 abs_cursor = abs_db.cursor()
@@ -180,16 +232,16 @@ DEPOSITE_RATE = 0.7
 
 st.image("Images/Heading_Letter_head.png")
 
-qoutation = st.radio("Select an option below",["Qoutation", "Invoice", "Edit Qoutation", "Edit Invoice"])
+qoutation = st.radio("**Select an option below**",["**Qoutation**", "**Invoice**"])
 
-if qoutation.casefold() == "Qoutation".casefold():
+if qoutation.casefold() == "**Qoutation**".casefold():
     gen_qoutation()
-elif qoutation.casefold() == "Invoice".casefold():
+elif qoutation.casefold() == "**Invoice**".casefold():
     gen_invoice()
-elif qoutation.casefold() == "Edit Qoutation".casefold():
-    edit_qoutation()
-elif qoutation.casefold() == "Edit Invoice".casefold():
-    edit_invoice()
+# elif qoutation.casefold() == "Edit Qoutation".casefold():
+#     edit_qoutation()
+# elif qoutation.casefold() == "Edit Invoice".casefold():
+#     edit_invoice()
 
 
 
