@@ -5,6 +5,9 @@ import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
 
+abs_icon = open("Images/AbsAppIcon.png", "rb").read()
+st.set_page_config(page_title="Absaluminum".upper(), page_icon=abs_icon)
+
 def cust_details():
     st.write("**Customer Details**")
     inv_to = st.text_input("Invoiced To", key="Invto")
@@ -196,9 +199,6 @@ def finalise_inv_qout(mat_data):
         st.write(mat_data)
         abs_cursor.execute("DELETE FROM materials")
         abs_db.commit()
-    
-    
-
 
 def gen_qoutation():
     st.title("Generate new qoutation".upper())
@@ -229,8 +229,6 @@ abs_db.commit()
 
 TAX_RATE = 0.15
 DEPOSITE_RATE = 0.7
-
-st.image("Images/Heading_Letter_head.png")
 
 qoutation = st.radio("**Select an option below**",["**Qoutation**", "**Invoice**"])
 

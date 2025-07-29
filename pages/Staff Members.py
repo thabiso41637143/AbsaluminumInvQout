@@ -4,6 +4,9 @@ import json
 import sqlite3
 import pandas as pd
 
+abs_icon = open("Images/AbsAppIcon.png", "rb").read()
+st.set_page_config(page_title="Absaluminum".upper(), page_icon=abs_icon)
+
 def createTable():
     try:
         api_conne = requests.get("https://script.google.com/macros/s/AKfycbyZeOUxL5wj-shkOiysBLaLstwqNf2xRbz5r7MJNHBvdkR2qb2M_GEhxOg09hn-FIeRXg/exec?option=dataReader&menue=passdb")
