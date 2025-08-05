@@ -18,4 +18,6 @@ st.divider()
 
 st.header("Quotation Summary")
 
+st.divider()
 
+st.header("Staff Summary")
