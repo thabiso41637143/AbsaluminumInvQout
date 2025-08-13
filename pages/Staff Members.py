@@ -1,70 +1,83 @@
 import streamlit as st
-import requests
-import json
-import sqlite3
-import pandas as pd
+from Model import StaffData
 
 abs_icon = open("Images/AbsAppIcon.png", "rb").read()
 st.set_page_config(page_title="Absaluminum".upper(), page_icon=abs_icon)
 
-def run_query_list(query_list = []):
-    for query in query_list:
-        staff_cursor.execute(query)
-    staff_db.commit()
-
-def createTable():
-
-    try:
-        if not st.session_state.get('tables'):
-            api_conne = requests.get("https://script.google.com/macros/s/AKfycbyZeOUxL5wj-shkOiysBLaLstwqNf2xRbz5r7MJNHBvdkR2qb2M_GEhxOg09hn-FIeRXg/exec?option=dataReader&menue=passdb")
-            staff_tables = json.loads(api_conne.text)
-            st.session_state['tables'] = staff_tables
-           
-        run_query_list(st.session_state.get('tables', {}).get('create tables', []))
-        loadStaff()
-    except ConnectionError:
-        st.error(" Failed to connect to the server", icon="🚨")
-    except Exception:
-        st.error(" An error ocured while trying to connect to the server", icon="🚨")
-
-def loadStaff():
-    
-    if not st.session_state.get('trips'):
-        api_conne = requests.get("https://script.google.com/macros/s/AKfycbyZeOUxL5wj-shkOiysBLaLstwqNf2xRbz5r7MJNHBvdkR2qb2M_GEhxOg09hn-FIeRXg/exec?option=dataReader&menue=getabsstaff")
-        staff_data = json.loads(api_conne.text)
-        st.session_state['trips'] = staff_data
-
-    run_query_list(st.session_state.get('trips', {}).get("deleteData",[]))
-    run_query_list(st.session_state.get('trips', {}).get("query",[]))
-
-def show_staff_table(staff_days):
-
-    df = pd.DataFrame(staff_days, columns=["Date"])
-    st.table(df)
-
 def show_staff():
-    staff_cursor.execute("SELECT * FROM USER")
-    user_details = staff_cursor.fetchall()
-    for user in user_details:
-        st.divider()
-        st.header(user[2])
-        staff_cursor.execute("SELECT COUNT(*) FROM TRIPS WHERE UPPER(passid) = ?",(user[0],))
-        num_days = staff_cursor.fetchone()
-        st.subheader("SUMMARY")
-        st.write(f"""
-\nSalary: R
-\nRate: R 
-\nTotal number of days: {num_days[0]} 
-\n""")
-        if st.session_state.get(user[0]):
-            staff_cursor.execute("SELECT tripDate FROM TRIPS WHERE UPPER(passid) = ?",(user[0],))
-            show_staff_table(staff_cursor.fetchall())
-        else:
-            st.button("View Days", key=user[0])
+    try:
+        for user in staff.get_all_user():
+            st.header(user[2])
+            st.subheader("SUMMARY")
+            st.write(staff.get_staff_summary(user[0]))
+            col1, col2, col3 = st.columns(3, border=False)
+            with col1:
+                st.button("View Days", key=user[0] + "view_days")
+            with col2:
+                st.button("View Loans", key=user[0] + "view_loans")
+            with col3:
+                st.button("View Profile", key=user[0] + "view_profile")
+            if st.session_state.get(user[0] + "view_days"):
+                st.write(staff.get_staff_dates(user[0]))
+            elif st.session_state.get(user[0] + "view_profile"):
+                st.write(staff.get_staff_profile(user[0]))
+            elif st.session_state.get(user[0] + "view_loans"):
+                st.write(staff.get_staff_loan(user[0]))
+
+            st.divider()
+    except Exception:
+        st.error("Unable to show staff information.", icon="🚨")
+
+def staff_register():
+    selected_staff = []
+    for st_id, st_name in staff.get_all_staff_names():
+        if st.checkbox(st_name):
+            selected_staff.append((st_id, st_name))
+    
+    if len(selected_staff) > 0:
+        st.markdown(
+    """
+    <hr style="border: 4px dotted red;">
+    """,
+    unsafe_allow_html=True
+)
+        st.subheader("**List of staff that come to work**")
+        for st_id, st_name in selected_staff:
+            st.write(st_name)
+        
+        if st.button("Capture Staff"):
+            capture_staff(selected_staff)
+        st.markdown(
+    """
+    <hr style="border: 4px dotted red;">
+    """,
+    unsafe_allow_html=True
+)
+
+def capture_staff(selected_staff):
+    st.write("Send to the database")
+    print(selected_staff)
+    st.session_state["show register"] = False
+    st.rerun()
 
 st.title("Staff Members")
-staff_db = sqlite3.connect("staffDatabase.db")
-staff_cursor = staff_db.cursor()
+staff = StaffData()
+st.divider()
+left, right = st.columns(2, border=False)
 
-createTable()
-show_staff()
+with left:
+    st.button("View Staff Summary", key="staff_summary")
+    if st.session_state.get("staff_summary"):
+        st.session_state["show staff"] = True
+        st.session_state["show register"] = False
+        
+with right:
+    st.button("Staff Register", key= "staff_register")
+    if st.session_state.get("staff_register"):
+        st.session_state["show staff"] = False
+        st.session_state["show register"] = True
+
+if st.session_state.get("show staff"):
+    show_staff()
+elif st.session_state.get("show register"):
+    staff_register()

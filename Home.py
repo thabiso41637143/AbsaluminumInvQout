@@ -1,4 +1,5 @@
 import streamlit as st
+from Model import staffSummary
 
 #page = st.sidebar.selectbox("Select a page", ["Home", "Qoute and Invoice", "Staff Members", "View Invoice and Qoute"])
 abs_icon = open("Images/AbsAppIcon.png", "rb").read()
@@ -13,11 +14,12 @@ st.divider()
 
 st.header("Invoice Summary")
 
+st.divider()
+
+st.header("Staff Summary")
+staff_summ = staffSummary()
+st.write(staff_summ.get_staff_summary())
 
 st.divider()
 
 st.header("Quotation Summary")
-
-st.divider()
-
-st.header("Staff Summary")
